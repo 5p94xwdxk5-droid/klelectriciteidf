@@ -36,7 +36,7 @@ jobs:
       - name: Publish index.html over SFTP
         shell: bash
         env:
-          OVH_SFTP_PASSWORD: ${{ secrets.OVH_SFTP_PASSWORD }}
+          OVH_SFTP_PASSWORD: ${{ secrets.OVH_SFTP_PASSWORD || secrets.OVH_SFTP_PASSWOR }}
         run: |
           set -euo pipefail
           export LC_ALL=C

@@ -1,9 +1,23 @@
 # Kénido Louissaint — Électricien indépendant
 
-Site vitrine statique dans `index.html`. Les photos et le logo sont intégrés, sans dépendance ni étape de compilation.
+Site vitrine autonome, en français, avec les photographies de chantier fournies, le logo L&G Réno et les liens directs vers WhatsApp et le téléphone.
 
-## Aperçu
+## Version du 22 septembre 2026
 
-Importer le dépôt dans Vercel, framework Other, sans commande de build, dossier de sortie `.`. Branche de prévisualisation : `codex/site-preview`.
+- Accueil minimaliste : grand titre et portrait fondu dans le fond, sans cadre visible.
+- Galerie de six photos présentées une par une au défilement, avec commandes de sélection.
+- Palette neutre pierre et bleu grisé, sans flèches décoratives.
+- Parcours vers la fin : bac professionnel en électrotechnique, session 2017, et expériences professionnelles dans un volet « En savoir plus ».
+- Contact WhatsApp et numéro accessibles dans l’en-tête fixe.
+- Présentation du partenariat avec L&G Réno.
+- Adaptation aux petits écrans, respect du réglage de réduction des animations.
 
-Les liens WhatsApp et téléphone sont actifs. Le diplôme est affiché dans le héros. Les mentions légales restent à compléter avant publication définitive. Aucun domaine personnalisé à relier avant validation.
+## Vérification
+
+Affichage contrôlé dans le navigateur sur ordinateur et aux largeurs de 375 et 345 px, sans débordement horizontal. Navigation de galerie, chargement des huit images, volet du parcours et mentions légales vérifiés.
+
+## Utilisation
+
+Le fichier `index.html` contient le HTML, le CSS, le JavaScript et les images. Il peut être servi par un hébergement statique. Aucun formulaire ni outil de suivi n’a été ajouté.
+
+Cette branche est une prévisualisation. Les informations administratives manquantes dans les mentions légales doivent être complétées. La publication et la fusion dans la branche principale restent à valider.

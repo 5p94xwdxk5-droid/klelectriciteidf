@@ -89,26 +89,15 @@ jobs:
               -P 22 -b - "$ovh_login@$ovh_host"
           }
           
-          # Inspect the SFTP login directory without writing remote files.
-          ovh_sftp <<'SFTP'
-          pwd
-          ls -1a
-          -ls -1a www
-          -ls -1a /www
-          -ls -l index.html
-          SFTP
-          echo 'SFTP directory inspection complete; no remote writes were made.'
-          exit 1
-
           # Inspect the actual web directory first. A connection or listing failure
           # aborts; it is never treated as permission to replace an unknown file.
           ovh_sftp >"$ovh_temp_dir/listing" <<'SFTP'
-          @cd www
-          @ls -1a
+          @ls -1a www
           SFTP
           
           ovh_has_index=false
           while IFS= read -r ovh_entry; do
+            ovh_entry="${ovh_entry#www/}"
             if [[ "$ovh_entry" == 'index.html' ]]; then
               ovh_has_index=true
             fi
@@ -120,36 +109,35 @@ jobs:
           
           # Download the existing page before any write. Abort if it cannot be backed up.
           if [[ "$ovh_has_index" == true ]]; then
-            printf '@cd www\n@get index.html "%s/previous-index.html"\n' "$ovh_temp_dir" | ovh_sftp
+            printf '@get www/index.html "%s/previous-index.html"\n' "$ovh_temp_dir" | ovh_sftp
             test -f "$ovh_temp_dir/previous-index.html"
           fi
           
           {
-            printf '@cd www\n'
-            printf '@put index.html %s\n' "$ovh_upload"
-            printf '@chmod 644 %s\n' "$ovh_upload"
+            printf '@put index.html www/%s\n' "$ovh_upload"
+            printf '@chmod 644 www/%s\n' "$ovh_upload"
             if [[ "$ovh_has_index" == true ]]; then
-              printf '@rename index.html %s\n' "$ovh_backup"
+              printf '@rename www/index.html www/%s\n' "$ovh_backup"
             fi
-            printf '@rename %s index.html\n' "$ovh_upload"
+            printf '@rename www/%s www/index.html\n' "$ovh_upload"
           } >"$ovh_temp_dir/publish.batch"
           
           if ! ovh_sftp <"$ovh_temp_dir/publish.batch"; then
             # If the old index was moved but the final rename failed, restore it only
             # after confirming that no new index occupies its name. Never delete files.
             if [[ "$ovh_has_index" == true ]] && ovh_sftp >"$ovh_temp_dir/recovery-listing" <<'SFTP'
-          @cd www
-          @ls -1a
+          @ls -1a www
           SFTP
             then
               ovh_index_after_failure=false
               ovh_backup_after_failure=false
               while IFS= read -r ovh_entry; do
+                ovh_entry="${ovh_entry#www/}"
                 [[ "$ovh_entry" != 'index.html' ]] || ovh_index_after_failure=true
                 [[ "$ovh_entry" != "$ovh_backup" ]] || ovh_backup_after_failure=true
               done <"$ovh_temp_dir/recovery-listing"
               if [[ "$ovh_index_after_failure" == false && "$ovh_backup_after_failure" == true ]]; then
-                if printf '@cd www\n@rename %s index.html\n' "$ovh_backup" | ovh_sftp; then
+                if printf '@rename www/%s www/index.html\n' "$ovh_backup" | ovh_sftp; then
                   echo 'The previous index was restored after the failed publication.' >&2
                 else
                   printf 'Automatic restoration failed. The previous index is retained at www/%s.\n' "$ovh_backup" >&2

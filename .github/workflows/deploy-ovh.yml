@@ -89,6 +89,11 @@ jobs:
               -P 22 -b - "$ovh_login@$ovh_host"
           }
           
+          echo 'Inspecting the OVH web directory.'
+          ovh_sftp <<'SFTP'
+          ls -la www
+          SFTP
+
           # Inspect the actual web directory first. A connection or listing failure
           # aborts; it is never treated as permission to replace an unknown file.
           ovh_sftp >"$ovh_temp_dir/listing" <<'SFTP'
@@ -107,19 +112,16 @@ jobs:
             fi
           done <"$ovh_temp_dir/listing"
           
-          # Download the existing page before any write. Abort if it cannot be backed up.
-          if [[ "$ovh_has_index" == true ]]; then
-            printf '@get www/index.html "%s/previous-index.html"\n' "$ovh_temp_dir" | ovh_sftp
-            test -f "$ovh_temp_dir/previous-index.html"
-          fi
-          
+          # Keep the previous entry on OVH by renaming it before promotion.
+          # This also preserves the provider's initial placeholder if it is a symlink.
+          echo 'OVH directory checked; uploading the prepared page.'
           {
-            printf '@put index.html www/%s\n' "$ovh_upload"
-            printf '@chmod 644 www/%s\n' "$ovh_upload"
+            printf 'put index.html www/%s\n' "$ovh_upload"
+            printf 'chmod 644 www/%s\n' "$ovh_upload"
             if [[ "$ovh_has_index" == true ]]; then
-              printf '@rename www/index.html www/%s\n' "$ovh_backup"
+              printf 'rename www/index.html www/%s\n' "$ovh_backup"
             fi
-            printf '@rename www/%s www/index.html\n' "$ovh_upload"
+            printf 'rename www/%s www/index.html\n' "$ovh_upload"
           } >"$ovh_temp_dir/publish.batch"
           
           if ! ovh_sftp <"$ovh_temp_dir/publish.batch"; then
@@ -137,7 +139,7 @@ jobs:
                 [[ "$ovh_entry" != "$ovh_backup" ]] || ovh_backup_after_failure=true
               done <"$ovh_temp_dir/recovery-listing"
               if [[ "$ovh_index_after_failure" == false && "$ovh_backup_after_failure" == true ]]; then
-                if printf '@rename www/%s www/index.html\n' "$ovh_backup" | ovh_sftp; then
+                if printf 'rename www/%s www/index.html\n' "$ovh_backup" | ovh_sftp; then
                   echo 'The previous index was restored after the failed publication.' >&2
                 else
                   printf 'Automatic restoration failed. The previous index is retained at www/%s.\n' "$ovh_backup" >&2

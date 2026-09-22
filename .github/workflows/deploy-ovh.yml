@@ -89,6 +89,17 @@ jobs:
               -P 22 -b - "$ovh_login@$ovh_host"
           }
           
+          # Inspect the SFTP login directory without writing remote files.
+          ovh_sftp <<'SFTP'
+          pwd
+          ls -1a
+          -ls -1a www
+          -ls -1a /www
+          -ls -l index.html
+          SFTP
+          echo 'SFTP directory inspection complete; no remote writes were made.'
+          exit 1
+
           # Inspect the actual web directory first. A connection or listing failure
           # aborts; it is never treated as permission to replace an unknown file.
           ovh_sftp >"$ovh_temp_dir/listing" <<'SFTP'

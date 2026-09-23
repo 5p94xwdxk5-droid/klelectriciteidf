@@ -16,6 +16,7 @@ on:
       - apple-touch-icon.png
       - kenido-electricien.jpg
       - lgreno-logo.png
+      - kl-electricite-logo.png
       - chantier-cables-plafond.jpg
       - chantier-armoire-electrique.jpg
       - chantier-cheminement-cables.jpg
@@ -73,7 +74,7 @@ jobs:
           # The home page is always promoted last.
           ovh_candidates=(
             robots.txt sitemap.xml indexnow-key.txt favicon.svg favicon.png favicon.ico apple-touch-icon.png
-            kenido-electricien.jpg lgreno-logo.png chantier-cables-plafond.jpg
+            kenido-electricien.jpg lgreno-logo.png kl-electricite-logo.png chantier-cables-plafond.jpg
             chantier-armoire-electrique.jpg chantier-cheminement-cables.jpg
             chantier-points-electriques.jpg chantier-pose-prise.jpg chantier-raccordement.jpg
           )
@@ -318,7 +319,7 @@ jobs:
 
           names = (
               "robots.txt", "sitemap.xml", "indexnow-key.txt", "favicon.svg", "favicon.png", "favicon.ico",
-              "apple-touch-icon.png", "kenido-electricien.jpg", "lgreno-logo.png",
+              "apple-touch-icon.png", "kenido-electricien.jpg", "lgreno-logo.png", "kl-electricite-logo.png",
               "chantier-cables-plafond.jpg", "chantier-armoire-electrique.jpg",
               "chantier-cheminement-cables.jpg", "chantier-points-electriques.jpg",
               "chantier-pose-prise.jpg", "chantier-raccordement.jpg", "index.html",

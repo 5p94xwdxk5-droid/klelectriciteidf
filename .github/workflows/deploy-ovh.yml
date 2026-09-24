@@ -19,7 +19,7 @@ on:
       - lgreno-logo.png
       - kl-electricite-logo.png
       - kl-monogram-v2.png
-      - kl-monogram-outline-v8.png
+      - kl-monogram-signature-v11.png
       - hero-electric-sketch.jpg
       - hero-electric-still-life.jpg
       - chantier-cables-plafond.jpg
@@ -80,7 +80,7 @@ jobs:
           ovh_candidates=(
             robots.txt sitemap.xml electricien-bailly.html indexnow-key.txt favicon.svg favicon.png favicon.ico apple-touch-icon.png
             kenido-electricien.jpg lgreno-logo.png kl-electricite-logo.png hero-electric-sketch.jpg chantier-cables-plafond.jpg
-            hero-electric-still-life.jpg kl-monogram-v2.png kl-monogram-outline-v8.png
+            hero-electric-still-life.jpg kl-monogram-v2.png kl-monogram-signature-v11.png
             chantier-armoire-electrique.jpg chantier-cheminement-cables.jpg
             chantier-points-electriques.jpg chantier-pose-prise.jpg chantier-raccordement.jpg
           )
@@ -326,7 +326,7 @@ jobs:
           names = (
               "robots.txt", "sitemap.xml", "electricien-bailly.html", "indexnow-key.txt", "favicon.svg", "favicon.png", "favicon.ico",
               "apple-touch-icon.png", "kenido-electricien.jpg", "lgreno-logo.png", "kl-electricite-logo.png", "hero-electric-sketch.jpg",
-              "hero-electric-still-life.jpg", "kl-monogram-v2.png", "kl-monogram-outline-v8.png",
+              "hero-electric-still-life.jpg", "kl-monogram-v2.png", "kl-monogram-signature-v11.png",
               "chantier-cables-plafond.jpg", "chantier-armoire-electrique.jpg",
               "chantier-cheminement-cables.jpg", "chantier-points-electriques.jpg",
               "chantier-pose-prise.jpg", "chantier-raccordement.jpg", "index.html",

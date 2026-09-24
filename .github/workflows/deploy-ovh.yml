@@ -5,6 +5,7 @@ on:
     branches: [codex/site-preview]
     paths:
       - index.html
+      - electricien-bailly.html
       - robots.txt
       - sitemap.xml
       - indexnow-key.txt
@@ -18,6 +19,7 @@ on:
       - lgreno-logo.png
       - kl-electricite-logo.png
       - kl-monogram-v2.png
+      - kl-monogram-electric-v5.png
       - hero-electric-sketch.jpg
       - hero-electric-still-life.jpg
       - chantier-cables-plafond.jpg
@@ -76,9 +78,9 @@ jobs:
           # neither its source rules nor deployment scripts are published as web assets.
           # The home page is always promoted last.
           ovh_candidates=(
-            robots.txt sitemap.xml indexnow-key.txt favicon.svg favicon.png favicon.ico apple-touch-icon.png
+            robots.txt sitemap.xml electricien-bailly.html indexnow-key.txt favicon.svg favicon.png favicon.ico apple-touch-icon.png
             kenido-electricien.jpg lgreno-logo.png kl-electricite-logo.png hero-electric-sketch.jpg chantier-cables-plafond.jpg
-            hero-electric-still-life.jpg kl-monogram-v2.png
+            hero-electric-still-life.jpg kl-monogram-v2.png kl-monogram-electric-v5.png
             chantier-armoire-electrique.jpg chantier-cheminement-cables.jpg
             chantier-points-electriques.jpg chantier-pose-prise.jpg chantier-raccordement.jpg
           )
@@ -322,9 +324,9 @@ jobs:
           from pathlib import Path
 
           names = (
-              "robots.txt", "sitemap.xml", "indexnow-key.txt", "favicon.svg", "favicon.png", "favicon.ico",
+              "robots.txt", "sitemap.xml", "electricien-bailly.html", "indexnow-key.txt", "favicon.svg", "favicon.png", "favicon.ico",
               "apple-touch-icon.png", "kenido-electricien.jpg", "lgreno-logo.png", "kl-electricite-logo.png", "hero-electric-sketch.jpg",
-              "hero-electric-still-life.jpg", "kl-monogram-v2.png",
+              "hero-electric-still-life.jpg", "kl-monogram-v2.png", "kl-monogram-electric-v5.png",
               "chantier-cables-plafond.jpg", "chantier-armoire-electrique.jpg",
               "chantier-cheminement-cables.jpg", "chantier-points-electriques.jpg",
               "chantier-pose-prise.jpg", "chantier-raccordement.jpg", "index.html",

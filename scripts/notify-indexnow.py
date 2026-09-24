@@ -11,6 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ORIGIN = "https://klelectricienidf.fr"
+PAGES = [(ORIGIN + "/", ROOT / "index.html"),
+         (ORIGIN + "/electricien-bailly.html", ROOT / "electricien-bailly.html")]
 KEY_URL = ORIGIN + "/indexnow-key.txt"
 ENDPOINT = "https://api.indexnow.org/indexnow"
 
@@ -20,7 +22,7 @@ def main():
     if not re.fullmatch(r"[0-9a-f]{32}", key):
         raise ValueError("Invalid IndexNow ownership key format")
     context = ssl.create_default_context()
-    for url, path in [(KEY_URL, ROOT / "indexnow-key.txt"), (ORIGIN + "/", ROOT / "index.html")]:
+    for url, path in [(KEY_URL, ROOT / "indexnow-key.txt"), *PAGES]:
         request = urllib.request.Request(url, headers={"Cache-Control": "no-cache"})
         with urllib.request.urlopen(request, timeout=20, context=context) as response:
             if response.status != 200 or response.url != url:
@@ -29,9 +31,9 @@ def main():
         if hashlib.sha256(actual).digest() != hashlib.sha256(path.read_bytes()).digest():
             raise ValueError("Public content differs from this deployment; notification skipped")
     payload = {"host": "klelectricienidf.fr", "key": key,
-               "keyLocation": KEY_URL, "urlList": [ORIGIN + "/"]}
+               "keyLocation": KEY_URL, "urlList": [url for url, _ in PAGES]}
     if "--dry-run" in sys.argv:
-        print("Public ownership file and homepage verified; no IndexNow notification sent.")
+        print("Public ownership file and pages verified; no IndexNow notification sent.")
         return
     request = urllib.request.Request(ENDPOINT, data=json.dumps(payload).encode("utf-8"),
                                     headers={"Content-Type": "application/json; charset=utf-8"},

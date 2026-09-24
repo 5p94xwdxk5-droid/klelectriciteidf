@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /.ovh-
+Disallow: /.index-
+Disallow: /.upload-
+Disallow: /.before-
+Allow: /
+
+Sitemap: https://klelectricienidf.fr/sitemap.xml

@@ -1,0 +1,495 @@
+name: Publish electrician site to OVH
+
+on:
+  push:
+    branches: [codex/site-preview]
+    paths:
+      - index.html
+      - electricien-bailly.html
+      - robots.txt
+      - sitemap.xml
+      - indexnow-key.txt
+      - seo-apache.conf
+      - scripts/notify-indexnow.py
+      - favicon.svg
+      - favicon.png
+      - favicon.ico
+      - apple-touch-icon.png
+      - kenido-electricien.jpg
+      - lgreno-logo.png
+      - kl-electricite-logo.png
+      - kl-monogram-v2.png
+      - kl-monogram-signature-v11.png
+      - hero-electric-sketch.jpg
+      - hero-electric-still-life.jpg
+      - chantier-cables-plafond.jpg
+      - chantier-armoire-electrique.jpg
+      - chantier-cheminement-cables.jpg
+      - chantier-points-electriques.jpg
+      - chantier-pose-prise.jpg
+      - chantier-raccordement.jpg
+      - .github/workflows/deploy-ovh.yml
+      - .github/ovh_known_hosts
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ovh-electrician-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/codex/site-preview'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Read the exact public commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid commit ID.' >&2; exit 1; }
+          git init --quiet .
+          git remote add origin https://github.com/5p94xwdxk5-droid/klelectriciteidf.git
+          git -c credential.helper= fetch --quiet --no-tags --depth=1 origin "$GITHUB_SHA"
+          git checkout --quiet --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Publish the site and available SEO assets over SFTP
+        id: publish_files
+        shell: bash
+        env:
+          OVH_SFTP_PASSWORD: ${{ secrets.OVH_SFTP_PASSWORD || secrets.OVH_SFTP_PASSWOR }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+
+          if [[ -z "${OVH_SFTP_PASSWORD:-}" ]]; then
+            echo 'Missing repository secret OVH_SFTP_PASSWORD (or OVH_SFTP_PASSWOR).' >&2
+            exit 1
+          fi
+          cd "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
+          [[ -s index.html && -f index.html ]] || { echo 'Root index.html is missing or empty.' >&2; exit 1; }
+          [[ -s seo-apache.conf && -f seo-apache.conf && ! -L seo-apache.conf ]] || { echo 'The managed Apache rules are missing or invalid.' >&2; exit 1; }
+          [[ -s indexnow-key.txt && -f indexnow-key.txt && ! -L indexnow-key.txt ]] || { echo 'The public IndexNow key is missing or invalid.' >&2; exit 1; }
+
+          # Explicit public names only. Server configuration is merged privately below;
+          # neither its source rules nor deployment scripts are published as web assets.
+          # The home page is always promoted last.
+          ovh_candidates=(
+            robots.txt sitemap.xml electricien-bailly.html indexnow-key.txt favicon.svg favicon.png favicon.ico apple-touch-icon.png
+            kenido-electricien.jpg lgreno-logo.png kl-electricite-logo.png hero-electric-sketch.jpg chantier-cables-plafond.jpg
+            hero-electric-still-life.jpg kl-monogram-v2.png kl-monogram-signature-v11.png
+            chantier-armoire-electrique.jpg chantier-cheminement-cables.jpg
+            chantier-points-electriques.jpg chantier-pose-prise.jpg chantier-raccordement.jpg
+          )
+          ovh_files=()
+          for ovh_file in "${ovh_candidates[@]}"; do
+            if [[ -e "$ovh_file" ]]; then
+              [[ -f "$ovh_file" && -s "$ovh_file" && ! -L "$ovh_file" ]] || { printf 'Invalid or empty deployment file: %s\n' "$ovh_file" >&2; exit 1; }
+              ovh_files+=("$ovh_file")
+            fi
+          done
+
+          ovh_host='ftp.cluster129.hosting.ovh.net'
+          ovh_login='klelecv'
+          ovh_known_hosts="$PWD/.github/ovh_known_hosts"
+          [[ -s "$ovh_known_hosts" ]] || { echo 'Missing pinned OVH host key.' >&2; exit 1; }
+          ssh-keygen -F "$ovh_host" -f "$ovh_known_hosts" >/dev/null || { echo 'The pinned key does not contain the expected OVH host.' >&2; exit 1; }
+          [[ "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]] || { echo 'Invalid GitHub run identifier.' >&2; exit 1; }
+          [[ "${GITHUB_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid commit ID.' >&2; exit 1; }
+          ovh_suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA:0:12}"
+          ovh_temp_dir=$(mktemp -d)
+          trap 'rm -rf -- "$ovh_temp_dir"' EXIT
+
+          # The password stays in the process environment, never in command arguments,
+          # the helper file, or diagnostic output.
+          cat >"$ovh_temp_dir/askpass" <<'ASKPASS'
+          #!/bin/sh
+          printf '%s\n' "$OVH_SFTP_PASSWORD"
+          ASKPASS
+          chmod 700 "$ovh_temp_dir/askpass"
+          export SSH_ASKPASS="$ovh_temp_dir/askpass"
+          export SSH_ASKPASS_REQUIRE=force
+          export DISPLAY=:0
+
+          ovh_sftp() {
+            sftp -q \
+              -o BatchMode=no \
+              -o StrictHostKeyChecking=yes \
+              -o "UserKnownHostsFile=$ovh_known_hosts" \
+              -o GlobalKnownHostsFile=/dev/null \
+              -o PreferredAuthentications=password \
+              -o PubkeyAuthentication=no \
+              -o NumberOfPasswordPrompts=1 \
+              -o ConnectTimeout=20 \
+              -o ServerAliveInterval=10 \
+              -o ServerAliveCountMax=2 \
+              -P 22 -b - "$ovh_login@$ovh_host"
+          }
+
+          declare -A ovh_remote=()
+          declare -A ovh_private=()
+          ovh_read_listing() {
+            if ! printf '@ls -1a www\n' | ovh_sftp >"$ovh_temp_dir/listing"; then
+              echo 'Cannot inspect the OVH directory; no unknown file will be replaced.' >&2
+              return 1
+            fi
+            ovh_remote=()
+            while IFS= read -r ovh_entry; do
+              ovh_entry="${ovh_entry#www/}"
+              [[ -z "$ovh_entry" ]] || ovh_remote["$ovh_entry"]=1
+            done <"$ovh_temp_dir/listing"
+            if ! printf '@ls -1a .\n' | ovh_sftp >"$ovh_temp_dir/private-listing"; then
+              echo 'Cannot inspect private configuration backup names; no unknown file will be replaced.' >&2
+              return 1
+            fi
+            ovh_private=()
+            while IFS= read -r ovh_entry; do
+              ovh_entry="${ovh_entry#./}"
+              [[ -z "$ovh_entry" ]] || ovh_private["$ovh_entry"]=1
+            done <"$ovh_temp_dir/private-listing"
+          }
+          ovh_has_remote_path() {
+            local ovh_path="$1"
+            if [[ "$ovh_path" == www/* ]]; then
+              [[ "${ovh_remote[${ovh_path#www/}]:-0}" == 1 ]]
+            else
+              [[ "${ovh_private[$ovh_path]:-0}" == 1 ]]
+            fi
+          }
+
+          ovh_read_listing
+
+          # Keep every byte of pre-existing OVH configuration outside our marked block.
+          # Never print its contents: another application may have private directives.
+          ovh_original_htaccess="$ovh_temp_dir/original.htaccess"
+          ovh_merged_htaccess="$ovh_temp_dir/merged.htaccess"
+          if [[ "${ovh_remote[.htaccess]:-0}" == 1 ]]; then
+            printf '@get www/.htaccess %s\n' "$ovh_original_htaccess" | ovh_sftp
+            [[ -f "$ovh_original_htaccess" && ! -L "$ovh_original_htaccess" ]] || { echo 'Cannot safely read existing Apache configuration.' >&2; exit 1; }
+          else
+            : >"$ovh_original_htaccess"
+          fi
+          python3 - "$ovh_original_htaccess" "$ovh_merged_htaccess" <<'PYMERGE'
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          original = Path(sys.argv[1]).read_bytes()
+          rules = Path("seo-apache.conf").read_bytes()
+          begin = b"# BEGIN KL ELECTRICIEN MANAGED SEO"
+          end = b"# END KL ELECTRICIEN MANAGED SEO"
+          block = re.compile(rb"(?m)^" + re.escape(begin) + rb"\r?\n[\s\S]*?^" + re.escape(end) + rb"(?:\r?\n|$)")
+          if rules.count(begin) != 1 or rules.count(end) != 1 or not block.fullmatch(rules):
+              sys.exit("The managed Apache source must contain exactly one complete block.")
+          if begin in original or end in original:
+              matches = list(block.finditer(original))
+              if original.count(begin) != 1 or original.count(end) != 1 or len(matches) != 1:
+                  sys.exit("Ambiguous managed Apache markers; existing configuration is untouched.")
+              match = matches[0]
+              merged = original[:match.start()] + rules + original[match.end():]
+          else:
+              separator = b"" if not original else (b"\n" if original.endswith(b"\n") else b"\n\n")
+              merged = original + separator + rules
+          Path(sys.argv[2]).write_bytes(merged)
+          os.chmod(sys.argv[2], 0o600)
+          PYMERGE
+          ovh_files+=(.htaccess index.html)
+
+          declare -A ovh_had_file=()
+          declare -A ovh_upload_paths=() ovh_backup_paths=() ovh_failed_paths=()
+          for ovh_file in "${ovh_files[@]}"; do
+            ovh_had_file["$ovh_file"]="${ovh_remote[$ovh_file]:-0}"
+            for ovh_kind in upload before failed; do
+              ovh_reserved="www/.ovh-${ovh_kind}-${ovh_suffix}-${ovh_file}"
+              # Even staged or failed configuration stays outside the public www root.
+              [[ "$ovh_file" != .htaccess ]] || ovh_reserved=".kl-apache-${ovh_kind}-${ovh_suffix}"
+              if ovh_has_remote_path "$ovh_reserved"; then
+                echo 'This deployment attempt already has remote files. Start a new run or rerun attempt.' >&2
+                exit 1
+              fi
+              case "$ovh_kind" in
+                upload) ovh_upload_paths["$ovh_file"]="$ovh_reserved" ;;
+                before) ovh_backup_paths["$ovh_file"]="$ovh_reserved" ;;
+                failed) ovh_failed_paths["$ovh_file"]="$ovh_reserved" ;;
+              esac
+            done
+          done
+
+          # Upload and chmod every new file before touching any public pathname.
+          for ovh_file in "${ovh_files[@]}"; do
+            ovh_source="$ovh_file"
+            [[ "$ovh_file" != .htaccess ]] || ovh_source="$ovh_merged_htaccess"
+            printf 'put %s %s\n' "$ovh_source" "${ovh_upload_paths[$ovh_file]}"
+            printf 'chmod 644 %s\n' "${ovh_upload_paths[$ovh_file]}"
+          done >"$ovh_temp_dir/upload.batch"
+          if ! ovh_sftp <"$ovh_temp_dir/upload.batch"; then
+            echo 'Upload failed before promotion. Public files are untouched; partial temporary uploads are retained.' >&2
+            exit 1
+          fi
+
+          # Refuse to overwrite a configuration edited by OVH or another operator since
+          # our read. Staged uploads can remain, but no public pathname changes here.
+          ovh_read_listing
+          if [[ "${ovh_remote[.htaccess]:-0}" != "${ovh_had_file[.htaccess]}" ]]; then
+            echo 'Apache configuration appeared or disappeared during staging; publication stopped.' >&2
+            exit 1
+          fi
+          if [[ "${ovh_had_file[.htaccess]}" == 1 ]]; then
+            printf '@get www/.htaccess %s\n' "$ovh_temp_dir/rechecked.htaccess" | ovh_sftp
+            if ! cmp -s -- "$ovh_original_htaccess" "$ovh_temp_dir/rechecked.htaccess"; then
+              echo 'Apache configuration changed during staging; publication stopped.' >&2
+              exit 1
+            fi
+          fi
+
+          # Preserve each old file, including a provider symlink, then rename its staged
+          # replacement. SFTP cannot atomically replace multiple files as a single unit.
+          for ovh_file in "${ovh_files[@]}"; do
+            if [[ "${ovh_had_file[$ovh_file]}" == 1 ]]; then
+              printf 'rename www/%s %s\n' "$ovh_file" "${ovh_backup_paths[$ovh_file]}"
+            fi
+            printf 'rename %s www/%s\n' "${ovh_upload_paths[$ovh_file]}" "$ovh_file"
+          done >"$ovh_temp_dir/promote.batch"
+
+          if ! ovh_sftp <"$ovh_temp_dir/promote.batch"; then
+            echo 'Promotion failed. Restoring the prior files wherever their backup is present.' >&2
+            if ovh_read_listing; then
+              for ovh_file in "${ovh_files[@]}"; do
+                ovh_backup="${ovh_backup_paths[$ovh_file]}"
+                ovh_failed="${ovh_failed_paths[$ovh_file]}"
+                if ! ovh_has_remote_path "$ovh_backup"; then
+                  # A newly introduced .htaccess is active immediately. Unlike a new
+                  # image, it must not remain enabled after a failed promotion.
+                  if [[ "$ovh_file" == .htaccess && "${ovh_had_file[$ovh_file]}" == 0 && "${ovh_remote[.htaccess]:-0}" == 1 ]] && ! ovh_has_remote_path "$ovh_failed"; then
+                    if printf '@get www/.htaccess %s\n' "$ovh_temp_dir/failed.htaccess" | ovh_sftp && cmp -s -- "$ovh_merged_htaccess" "$ovh_temp_dir/failed.htaccess"; then
+                      if printf 'rename www/.htaccess %s\n' "$ovh_failed" | ovh_sftp; then
+                        echo 'Restored the previous absence of Apache configuration; the replacement is retained privately.' >&2
+                      else
+                        echo 'The new Apache configuration could not be moved aside; inspect this failed run.' >&2
+                      fi
+                    else
+                      echo 'The new Apache configuration changed or could not be read; it was not moved.' >&2
+                    fi
+                  fi
+                  continue
+                fi
+                if ovh_has_remote_path "$ovh_failed"; then
+                  printf 'Recovery collision; prior %s remains at %s.\n' "$ovh_file" "$ovh_backup" >&2
+                  continue
+                fi
+                {
+                  if [[ "${ovh_remote[$ovh_file]:-0}" == 1 ]]; then
+                    printf 'rename www/%s %s\n' "$ovh_file" "$ovh_failed"
+                  fi
+                  printf 'rename %s www/%s\n' "$ovh_backup" "$ovh_file"
+                } >"$ovh_temp_dir/restore.batch"
+                if ovh_sftp <"$ovh_temp_dir/restore.batch"; then
+                  printf 'Restored previous %s.\n' "$ovh_file" >&2
+                else
+                  printf 'Restoration failed; prior %s remains at %s.\n' "$ovh_file" "$ovh_backup" >&2
+                fi
+              done
+            fi
+            echo 'Deployment failed. No remote files were deleted. Newly introduced assets can remain unreferenced; inspect retained backups before retrying.' >&2
+            exit 1
+          fi
+
+          printf 'Published %s files; index.html was promoted last.\n' "${#ovh_files[@]}"
+          printf 'Previous versions remain under www/.ovh-before-%s-<filename>.\n' "$ovh_suffix"
+          echo 'Apache configuration backups are retained outside the public document root.'
+          {
+            printf 'htaccess_before=%s\n' "${ovh_had_file[.htaccess]}"
+            printf 'htaccess_sha=%s\n' "$(sha256sum "$ovh_merged_htaccess" | cut -d ' ' -f 1)"
+            printf 'htaccess_original_sha=%s\n' "$(sha256sum "$ovh_original_htaccess" | cut -d ' ' -f 1)"
+          } >>"${GITHUB_OUTPUT:?GITHUB_OUTPUT must be set}"
+
+      - name: Verify every public HTTPS file
+        id: public_verification
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          python3 - <<'PYVERIFY'
+          import hashlib
+          import os
+          import re
+          import ssl
+          import sys
+          import time
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          names = (
+              "robots.txt", "sitemap.xml", "electricien-bailly.html", "indexnow-key.txt", "favicon.svg", "favicon.png", "favicon.ico",
+              "apple-touch-icon.png", "kenido-electricien.jpg", "lgreno-logo.png", "kl-electricite-logo.png", "hero-electric-sketch.jpg",
+              "hero-electric-still-life.jpg", "kl-monogram-v2.png", "kl-monogram-signature-v11.png",
+              "chantier-cables-plafond.jpg", "chantier-armoire-electrique.jpg",
+              "chantier-cheminement-cables.jpg", "chantier-points-electriques.jpg",
+              "chantier-pose-prise.jpg", "chantier-raccordement.jpg", "index.html",
+          )
+          allowed_types = {
+              ".html": {"text/html", "application/xhtml+xml"},
+              ".txt": {"text/plain"},
+              ".xml": {"application/xml", "text/xml"},
+              ".svg": {"image/svg+xml"},
+              ".png": {"image/png"},
+              ".jpg": {"image/jpeg"},
+              ".ico": {"image/x-icon", "image/vnd.microsoft.icon", "image/ico"},
+          }
+          if not Path("index.html").is_file():
+              sys.exit("The required index.html is missing.")
+
+          for name in names:
+              path = Path(name)
+              if not path.is_file():
+                  continue
+              expected = hashlib.sha256(path.read_bytes()).digest()
+              public_path = "/" if name == "index.html" else "/" + name
+              url = "https://klelectricienidf.fr" + public_path + "?deployment=" + os.environ["GITHUB_SHA"]
+              for attempt in range(2):
+                  try:
+                      request = urllib.request.Request(url, headers={"Cache-Control": "no-cache"})
+                      with urllib.request.urlopen(request, context=ssl.create_default_context(), timeout=10) as response:
+                          destination = urllib.parse.urlsplit(response.url)
+                          if destination.scheme != "https" or destination.hostname != "klelectricienidf.fr":
+                              raise ValueError("Unexpected public redirect")
+                          if response.status != 200:
+                              raise ValueError("HTTP status is not 200")
+                          content_type = response.headers.get_content_type()
+                          if content_type not in allowed_types[path.suffix]:
+                              raise ValueError(f"Unexpected Content-Type: {content_type}")
+                          if name == "index.html":
+                              directives = ",".join(response.headers.get_all("X-Robots-Tag", []))
+                              if re.search(r"(?<![a-z])(?:noindex|none)(?![a-z])", directives, re.I):
+                                  raise ValueError("The host sends an X-Robots-Tag that blocks indexing")
+                          actual = hashlib.sha256(response.read(path.stat().st_size + 1)).digest()
+                          if actual != expected:
+                              raise ValueError("Public bytes do not match the deployed file")
+                      print(f"Verified public HTTPS bytes and Content-Type: {public_path}")
+                      break
+                  except Exception as error:
+                      if attempt == 0:
+                          print(f"Verification of {public_path} failed; retrying once in 10 seconds.")
+                          time.sleep(10)
+                      else:
+                              sys.exit(f"Upload finished, but public verification failed for {public_path}: {error}. Retained remote backups remain available for recovery.")
+
+          # Do not fetch .htaccess. Verify its public effects instead, including query
+          # preservation and the exact final homepage bytes after each permanent redirect.
+          class VerifyRedirect(urllib.request.HTTPRedirectHandler):
+              def __init__(self, expected_url):
+                  self.expected_url = expected_url
+                  self.redirects = 0
+
+              def redirect_request(self, request, response, code, message, headers, new_url):
+                  if code != 301 or new_url != self.expected_url or self.redirects:
+                      raise ValueError("Expected exactly one 301 redirect to the canonical URL with the query intact")
+                  self.redirects += 1
+                  return super().redirect_request(request, response, code, message, headers, new_url)
+
+          query = "deployment=" + os.environ["GITHUB_SHA"] + "&source=seo%20audit"
+          canonical = "https://klelectricienidf.fr/?" + query
+          expected_home = hashlib.sha256(Path("index.html").read_bytes()).digest()
+          for source in ("http://klelectricienidf.fr/", "https://www.klelectricienidf.fr/", "https://klelectricienidf.fr/index.html"):
+              handler = VerifyRedirect(canonical)
+              opener = urllib.request.build_opener(handler, urllib.request.HTTPSHandler(context=ssl.create_default_context()))
+              request = urllib.request.Request(source + "?" + query, headers={"Cache-Control": "no-cache"})
+              try:
+                  with opener.open(request, timeout=15) as response:
+                      if handler.redirects != 1 or response.status != 200 or response.url != canonical:
+                          raise ValueError("The canonical permanent redirect is missing or incorrect")
+                      if response.headers.get_content_type() not in allowed_types[".html"]:
+                          raise ValueError("The redirect destination is not HTML")
+                      if hashlib.sha256(response.read(Path("index.html").stat().st_size + 1)).digest() != expected_home:
+                          raise ValueError("The redirect destination does not match the deployed homepage")
+                  print(f"Verified permanent canonical redirect and query preservation: {source}")
+              except Exception as error:
+                  sys.exit(f"Public canonical redirect verification failed: {error}. Retained remote backups remain available for recovery.")
+          PYVERIFY
+
+      - name: Restore prior Apache configuration if public verification fails
+        if: ${{ failure() && steps.public_verification.outcome == 'failure' }}
+        timeout-minutes: 2
+        shell: bash
+        env:
+          OVH_SFTP_PASSWORD: ${{ secrets.OVH_SFTP_PASSWORD || secrets.OVH_SFTP_PASSWOR }}
+          OVH_HTACCESS_BEFORE: ${{ steps.publish_files.outputs.htaccess_before }}
+          OVH_HTACCESS_SHA: ${{ steps.publish_files.outputs.htaccess_sha }}
+          OVH_HTACCESS_ORIGINAL_SHA: ${{ steps.publish_files.outputs.htaccess_original_sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          [[ -n "${OVH_SFTP_PASSWORD:-}" ]] || { echo 'The OVH credential is unavailable for configuration recovery.' >&2; exit 1; }
+          [[ "${OVH_HTACCESS_BEFORE:-}" =~ ^[01]$ && "${OVH_HTACCESS_SHA:-}" =~ ^[0-9a-f]{64}$ && "${OVH_HTACCESS_ORIGINAL_SHA:-}" =~ ^[0-9a-f]{64}$ ]] || { echo 'Verified Apache recovery metadata is unavailable.' >&2; exit 1; }
+          [[ "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ && "${GITHUB_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid recovery run identifiers.' >&2; exit 1; }
+          cd "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
+          ovh_host='ftp.cluster129.hosting.ovh.net'
+          ovh_login='klelecv'
+          ovh_known_hosts="$PWD/.github/ovh_known_hosts"
+          [[ -s "$ovh_known_hosts" ]] || { echo 'Missing pinned OVH host key.' >&2; exit 1; }
+          ssh-keygen -F "$ovh_host" -f "$ovh_known_hosts" >/dev/null || { echo 'The pinned key does not contain the expected OVH host.' >&2; exit 1; }
+          ovh_suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA:0:12}"
+          ovh_backup=".kl-apache-before-${ovh_suffix}"
+          ovh_failed=".kl-apache-failed-${ovh_suffix}"
+          ovh_temp_dir=$(mktemp -d)
+          trap 'rm -rf -- "$ovh_temp_dir"' EXIT
+          cat >"$ovh_temp_dir/askpass" <<'ASKPASS'
+          #!/bin/sh
+          printf '%s\n' "$OVH_SFTP_PASSWORD"
+          ASKPASS
+          chmod 700 "$ovh_temp_dir/askpass"
+          export SSH_ASKPASS="$ovh_temp_dir/askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0
+          ovh_sftp() {
+            sftp -q -o BatchMode=no -o StrictHostKeyChecking=yes \
+              -o "UserKnownHostsFile=$ovh_known_hosts" -o GlobalKnownHostsFile=/dev/null \
+              -o PreferredAuthentications=password -o PubkeyAuthentication=no \
+              -o NumberOfPasswordPrompts=1 -o ConnectTimeout=20 \
+              -o ServerAliveInterval=10 -o ServerAliveCountMax=2 \
+              -P 22 -b - "$ovh_login@$ovh_host"
+          }
+          printf '@ls -1a www\n' | ovh_sftp >"$ovh_temp_dir/listing"
+          declare -A ovh_remote=()
+          while IFS= read -r ovh_entry; do
+            ovh_entry="${ovh_entry#www/}"
+            [[ -z "$ovh_entry" ]] || ovh_remote["$ovh_entry"]=1
+          done <"$ovh_temp_dir/listing"
+          printf '@ls -1a .\n' | ovh_sftp >"$ovh_temp_dir/private-listing"
+          declare -A ovh_private=()
+          while IFS= read -r ovh_entry; do
+            ovh_entry="${ovh_entry#./}"
+            [[ -z "$ovh_entry" ]] || ovh_private["$ovh_entry"]=1
+          done <"$ovh_temp_dir/private-listing"
+          [[ "${ovh_remote[.htaccess]:-0}" == 1 && "${ovh_private[$ovh_failed]:-0}" == 0 ]] || { echo 'Configuration recovery would collide with a changed remote state; retained files are untouched.' >&2; exit 1; }
+          printf '@get www/.htaccess %s\n' "$ovh_temp_dir/current.htaccess" | ovh_sftp
+          [[ "$(sha256sum "$ovh_temp_dir/current.htaccess" | cut -d ' ' -f 1)" == "$OVH_HTACCESS_SHA" ]] || { echo 'Apache configuration was changed after publication; recovery will not replace it.' >&2; exit 1; }
+          if [[ "$OVH_HTACCESS_BEFORE" == 1 ]]; then
+            [[ "${ovh_private[$ovh_backup]:-0}" == 1 ]] || { echo 'The Apache backup is missing; no configuration was moved.' >&2; exit 1; }
+            printf '@get %s %s\n' "$ovh_backup" "$ovh_temp_dir/backup.htaccess" | ovh_sftp
+            [[ "$(sha256sum "$ovh_temp_dir/backup.htaccess" | cut -d ' ' -f 1)" == "$OVH_HTACCESS_ORIGINAL_SHA" ]] || { echo 'The Apache backup does not match the saved original; no configuration was moved.' >&2; exit 1; }
+          fi
+          {
+            printf 'rename www/.htaccess %s\n' "$ovh_failed"
+            if [[ "$OVH_HTACCESS_BEFORE" == 1 ]]; then
+              printf 'rename %s www/.htaccess\n' "$ovh_backup"
+            fi
+          } >"$ovh_temp_dir/restore.batch"
+          if ! ovh_sftp <"$ovh_temp_dir/restore.batch"; then
+            echo 'Apache recovery could not finish. The original and failed configuration remain retained under this run identifier for manual recovery.' >&2
+            exit 1
+          fi
+          echo 'The previous Apache configuration state has been restored; the failed replacement was renamed and retained.'
+          python3 - <<'PYRECOVER'
+          import urllib.request
+          with urllib.request.urlopen("https://klelectricienidf.fr/", timeout=15) as response:
+              if response.status != 200:
+                  raise SystemExit("Apache was restored, but the HTTPS homepage still requires inspection.")
+          print("The HTTPS homepage responds after Apache recovery. This deployment remains failed.")
+          PYRECOVER
+
+      - name: Notify IndexNow after public verification
+        shell: bash
+        run: python3 scripts/notify-indexnow.py

@@ -2,15 +2,12 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://klelectricienidf.fr/</loc>
-    <lastmod>2026-09-29</lastmod>
+    <lastmod>2026-10-18</lastmod>
     <image:image>
       <image:loc>https://klelectricienidf.fr/kenido-electricien.jpg</image:loc>
     </image:image>
     <image:image>
-      <image:loc>https://klelectricienidf.fr/chantier-cables-plafond.jpg</image:loc>
-    </image:image>
-    <image:image>
-      <image:loc>https://klelectricienidf.fr/chantier-armoire-electrique.jpg</image:loc>
+      <image:loc>https://klelectricienidf.fr/chantier-armoire-electrique-v2.jpg</image:loc>
     </image:image>
     <image:image>
       <image:loc>https://klelectricienidf.fr/chantier-cheminement-cables.jpg</image:loc>
@@ -24,9 +21,15 @@
     <image:image>
       <image:loc>https://klelectricienidf.fr/chantier-raccordement.jpg</image:loc>
     </image:image>
+    <image:image>
+      <image:loc>https://klelectricienidf.fr/realisation-plafonnier-anneaux.jpg</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://klelectricienidf.fr/realisation-plafonnier-geometrique.jpg</image:loc>
+    </image:image>
   </url>
   <url>
     <loc>https://klelectricienidf.fr/electricien-bailly.html</loc>
-    <lastmod>2026-09-29</lastmod>
+    <lastmod>2026-10-18</lastmod>
   </url>
 </urlset>

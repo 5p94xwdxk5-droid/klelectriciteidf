@@ -1,0 +1,24 @@
+name: Prepare OVH connection
+
+on:
+  push:
+    branches: [codex/site-preview]
+    paths: [.github/workflows/prepare-ovh.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-server-key:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Record public SFTP host keys for one-time enrollment
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh-keyscan -T 10 -t ed25519,rsa ftp.cluster129.hosting.ovh.net > "$RUNNER_TEMP/ovh_known_hosts"
+          test -s "$RUNNER_TEMP/ovh_known_hosts"
+          cat "$RUNNER_TEMP/ovh_known_hosts"
+          ssh-keygen -lf "$RUNNER_TEMP/ovh_known_hosts"
